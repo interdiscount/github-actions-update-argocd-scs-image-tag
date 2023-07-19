@@ -1,0 +1,35 @@
+name: 'Update the argocd scs repository'
+description: 'Update the scs repository with the new image tag'
+inputs:
+  short-sha:
+    description: 'The short SHA value of the git commit'
+    required: true
+  service-name:
+    description: 'The name of the service to update'
+    required: true
+  environment:
+    description: 'Environment [test|prod]'
+    required: true
+    default: test
+    options: 
+    - test
+    - prod
+runs:
+  using: "composite"
+  steps:
+    - name: Set up git config and update tag version in values
+      shell: bash
+      working-directory: scs
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+        wget https://github.com/mikefarah/yq/releases/download/v4.34.1/yq_linux_amd64 && chmod +x yq_linux_amd64
+
+        export IMAGE_TAG="${{ inputs.short-sha }}"
+        ./yq_linux_amd64 eval '.${{ inputs.service-name }}.image.tag = strenv(IMAGE_TAG)' -i ${{ inputs.service-name }}/values.yaml
+        ./yq_linux_amd64 eval '.images[0].newTag = strenv(IMAGE_TAG)' -i ${{ inputs.service-name }}/overlays/${{ inputs.environment }}/kustomization.yaml
+
+        git add "${{ inputs.service-name }}/overlays/${{ inputs.environment }}/kustomization.yaml"
+        git commit -m "Upgraded version of ${{ inputs.service-name }} to ${{ inputs.short-sha }}"
+        git push
